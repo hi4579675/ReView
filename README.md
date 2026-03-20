@@ -1,27 +1,33 @@
-# Re:View
+# ReView
 
-> RAG-based AI code reviewer that understands your entire codebase — not just the diff.
+> Your codebase has context. Your code reviewer should too.
+
+diff만 보는 리뷰어는 그만. 레포 전체를 이해하는 AI 코드 리뷰어.
 
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-Trigger-black?logo=github)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python)
 ![LangChain](https://img.shields.io/badge/LangChain-LCEL-green)
 ![pgvector](https://img.shields.io/badge/pgvector-Vector_DB-orange)
-![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-purple?logo=google)
+![Gemini](https://img.shields.io/badge/Gemini-1.5_Flash-purple?logo=google)
 
 ## 왜 만들었나요?
+팀 프로젝트를 할 때 PR이 올라오면 코드 리뷰를 남겨야 하는데 diff만 봐서는 맥락을 알기 어려웠습니다.
+"이 함수가 어디서 호출되지?", "기존 코드와 충돌이 안나나?"
+결국 레포를 뒤지고, 관련 파일을 열어보고 나서야 코멘트를 남기곤 했는데 한 사람의 코드를 리뷰할 때 30분에서 1시간까지 걸렸습니다.
+그래서 레포 전체를 이미 읽고 있는 리뷰어가 있다면 어떨까 싶었습니다.
 
-일반적인 AI 코드 리뷰 도구는 PR의 diff만 봐요.
-`reviewbot`은 **레포지토리 전체를 인덱싱**해서, 변경된 코드가 다른 파일에 어떤 영향을 미치는지까지 이해하고 리뷰합니다.
 
 ```
 // 기존 AI 리뷰
 "이 함수 이름이 명확하지 않네요."
 
-// reviewbot
+// ReView
 "이 함수가 auth/middleware.py에서도 호출되는데,
 거기선 반환값을 bool로 가정하고 있어요.
 이 PR에서 None을 반환할 수 있게 바뀌었으니 거기도 수정이 필요해요."
 ```
+일반적인 AI 코드 리뷰 도구는 PR의 diff만 보지만
+**ReView**는 레포지토리 전체를 인덱싱해서, 변경된 코드가 다른 파일에 어떤 영향을 미치는지까지 이해하고 리뷰합니다.
 
 ## 주요 기능
 
@@ -67,42 +73,30 @@ PR 오픈 (GitHub Actions)
 | AST 파싱 | tree-sitter |
 | 리랭킹 | CrossEncoder (sentence-transformers) |
 | 메시지 큐 | AWS SQS |
-| API 서버 | FastAPI |
 | 배포 | GitHub Actions |
 | 평가 | RAGAs |
 
-## 빠른 시작
+## 설치
 
-### 1. 설치
+### 1. 시크릿 설정
 
-```bash
-git clone https://github.com/your-username/ReView
-cd Review
-pip install -r requirements.txt
-```
+레포지토리의 Settings → Secrets → Actions에서 추가하세요.
 
-### 2. 환경 변수 설정
+| 시크릿 | 설명 |
+|---|---|
+| `GOOGLE_API_KEY` | Gemini API 키 |
+| `DATABASE_URL` | pgvector 연결 문자열 |
+| `AWS_ACCESS_KEY_ID` | AWS 액세스 키 |
+| `AWS_SECRET_ACCESS_KEY` | AWS 시크릿 키 |
+| `SQS_QUEUE_URL` | SQS 큐 URL |
 
-```bash
-cp .env.example .env
-```
+### 2. 워크플로우 추가
 
-```env
-GOOGLE_API_KEY=your_gemini_api_key
-GITHUB_TOKEN=your_github_token
-DATABASE_URL=postgresql://localhost/reviewbot
-AWS_ACCESS_KEY_ID=your_aws_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret
-SQS_QUEUE_URL=your_sqs_queue_url
-```
-
-### 3. GitHub Actions 워크플로우 추가
-
-레포지토리에 아래 파일을 추가하세요.
+레포지토리에 아래 파일을 추가하면 끝이에요.
 
 ```yaml
-# .github/workflows/reviewbot.yml
-name: reviewbot
+# .github/workflows/review.yml
+name: ReView
 
 on:
   pull_request:
@@ -113,35 +107,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Run reviewbot
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pip install reviewbot
-          reviewbot run --pr ${{ github.event.pull_request.number }}
+        with:
+          fetch-depth: 0
+      - name: Run ReView
+        uses: your-username/ReView@v1
+        with:
+          google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          database_url: ${{ secrets.DATABASE_URL }}
+          sqs_queue_url: ${{ secrets.SQS_QUEUE_URL }}
 ```
 
-## 검색 정확도
+### 3. PR 열기
 
-vanilla Gemini 대비 RAG 파이프라인 적용 후 성능 개선 (측정 예정)
+이제 PR을 열면 ReView가 자동으로 리뷰 코멘트를 달아요.
 
-| 지표 | baseline | reviewbot |
-|---|---|---|
-| Hit@3 | - | - |
-| Hit@5 | - | - |
-| MRR | - | - |
+## RAG 성능 실험
 
-> 측정 방법: RAGAs 프레임워크 사용, 코드 리뷰 품질 데이터셋 기반
+ReView는 단순한 서비스가 아니라, RAG 기법을 단계적으로 적용하며 성능 향상을 측정하는 실험 프로젝트이기도 해요.
+
+| 단계 | 기법 | Hit@3 | Hit@5 | MRR |
+|---|---|---|---|---|
+| Stage 0 | Baseline (코사인 유사도) | - | - | - |
+| Stage 1 | 청킹 최적화 (AST) | - | - | - |
+| Stage 2 | HyDE + 하이브리드 검색 | - | - | - |
+| Stage 3 | Cross-encoder 리랭킹 | - | - | - |
+| Stage 4 | 임베딩 파인튜닝 | - | - | - |
+
+> 측정 방법: RAGAs 프레임워크 사용 / `evaluation/` 폴더 참고
 
 ## 프로젝트 구조
 
 ```
-reviewbot/
+ReView/
 ├── .github/
 │   └── workflows/
-│       └── reviewbot.yml
-├── reviewbot/
+│       └── review.yml
+├── review/
 │   ├── ingestion/
 │   │   ├── ast_chunker.py       # tree-sitter 기반 AST 청킹
 │   │   └── repo_indexer.py      # 레포 전체 인덱싱
@@ -155,9 +157,16 @@ reviewbot/
 │   │   └── pr_handler.py        # PR diff 파싱 + 코멘트 작성
 │   └── main.py
 ├── evaluation/
-│   └── ragas_eval.ipynb         # RAGAs 평가 노트북
+│   ├── stage0_baseline.ipynb
+│   ├── stage1_chunking.ipynb
+│   ├── stage2_retrieval.ipynb
+│   ├── stage3_reranking.ipynb
+│   ├── stage4_embedding_finetune.ipynb
+│   └── results/
+│       └── performance_comparison.png
 ├── tests/
 ├── .env.example
+├── .gitignore
 ├── requirements.txt
 └── README.md
 ```
